@@ -6,6 +6,7 @@ export interface InterpreterCallbacks {
   onOutput: (text: string) => void;
   onInput: (prompt: string) => Promise<string>;
   onVarsUpdate?: (vars: Record<string, VisuAlgValue>) => void;
+  onStep?: (line: number) => Promise<void>;
 }
 
 class InterruptSignal {}
@@ -80,6 +81,11 @@ export class Interpreter {
   private async execStmt(stmt: Statement) {
     this.stepCount++;
     if (this.stepCount > this.maxSteps) throw new Error('Limite de execução atingido (loop infinito?)');
+
+    if (this.callbacks.onStep && 'line' in stmt) {
+      this.notifyVars();
+      await this.callbacks.onStep((stmt).line);
+    }
 
     switch (stmt.kind) {
       case 'Assign': {

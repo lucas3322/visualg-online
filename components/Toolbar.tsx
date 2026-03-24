@@ -1,18 +1,23 @@
 'use client';
 
 import { useState } from 'react';
-import { Play, Square, Trash2, AlignLeft, BookOpen } from 'lucide-react';
+import { Play, Square, Trash2, AlignLeft, BookOpen, FootprintsIcon, StepForward } from 'lucide-react';
 import ReferenceModal from './ReferenceModal';
 
 interface ToolbarProps {
   running: boolean;
+  stepping: boolean;
   onRun: () => void;
   onStop: () => void;
   onClear: () => void;
   onFormat: () => void;
+  onStartStep: () => void;
+  onNextStep: () => void;
 }
 
-export default function Toolbar({ running, onRun, onStop, onClear, onFormat }: ToolbarProps) {
+export default function Toolbar({
+  running, stepping, onRun, onStop, onClear, onFormat, onStartStep, onNextStep,
+}: ToolbarProps) {
   const [refOpen, setRefOpen] = useState(false);
 
   return (
@@ -33,7 +38,8 @@ export default function Toolbar({ running, onRun, onStop, onClear, onFormat }: T
 
         {/* Actions */}
         <div className="flex items-center gap-2">
-          {!running ? (
+          {/* Executar / Parar */}
+          {!running && !stepping ? (
             <button
               onClick={onRun}
               className="flex items-center gap-2 px-4 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold transition-all duration-150 shadow-lg shadow-violet-500/20 active:scale-95"
@@ -41,7 +47,7 @@ export default function Toolbar({ running, onRun, onStop, onClear, onFormat }: T
               <Play size={13} className="fill-white" />
               Executar
             </button>
-          ) : (
+          ) : (running && !stepping) ? (
             <button
               onClick={onStop}
               className="flex items-center gap-2 px-4 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-semibold transition-all duration-150 shadow-lg shadow-red-500/20 active:scale-95 animate-pulse"
@@ -49,13 +55,43 @@ export default function Toolbar({ running, onRun, onStop, onClear, onFormat }: T
               <Square size={13} className="fill-white" />
               Parar
             </button>
-          )}
+          ) : null}
+
+          {/* Passo a passo / Próximo passo */}
+          {!running && !stepping ? (
+            <button
+              onClick={onStartStep}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-600/20 hover:bg-amber-600/30 border border-amber-600/40 text-amber-400 hover:text-amber-300 text-xs font-medium transition-all duration-150 active:scale-95"
+              title="Executar passo a passo"
+            >
+              <FootprintsIcon size={13} />
+              Passo a Passo
+            </button>
+          ) : stepping ? (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={onNextStep}
+                className="flex items-center gap-2 px-4 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold transition-all duration-150 shadow-lg shadow-amber-500/20 active:scale-95"
+              >
+                <StepForward size={13} />
+                Próximo
+              </button>
+              <button
+                onClick={onStop}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-600/20 hover:bg-red-600/30 border border-red-600/40 text-red-400 hover:text-red-300 text-xs font-medium transition-all duration-150 active:scale-95"
+              >
+                <Square size={13} />
+                Parar
+              </button>
+            </div>
+          ) : null}
+
+          <div className="h-4 w-px bg-zinc-800 mx-1" />
 
           <button
             onClick={onFormat}
-            disabled={running}
+            disabled={running || stepping}
             className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 text-xs font-medium transition-all duration-150 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
-            title="Indentar código"
           >
             <AlignLeft size={13} />
             Indentar
@@ -63,7 +99,8 @@ export default function Toolbar({ running, onRun, onStop, onClear, onFormat }: T
 
           <button
             onClick={onClear}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 text-xs font-medium transition-all duration-150 active:scale-95"
+            disabled={running || stepping}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 text-xs font-medium transition-all duration-150 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
           >
             <Trash2 size={13} />
             Limpar
@@ -72,17 +109,23 @@ export default function Toolbar({ running, onRun, onStop, onClear, onFormat }: T
           <button
             onClick={() => setRefOpen(true)}
             className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 text-xs font-medium transition-all duration-150 active:scale-95"
-            title="Abrir referência de variáveis e comandos"
           >
             <BookOpen size={13} />
             Referência
           </button>
         </div>
 
-        {running && (
+        {/* Status */}
+        {running && !stepping && (
           <div className="flex items-center gap-2 ml-2">
             <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
             <span className="text-xs text-emerald-400 font-mono">executando...</span>
+          </div>
+        )}
+        {stepping && (
+          <div className="flex items-center gap-2 ml-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+            <span className="text-xs text-amber-400 font-mono">modo passo a passo</span>
           </div>
         )}
 

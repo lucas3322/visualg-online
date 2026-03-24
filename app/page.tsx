@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState, useCallback } from 'react';
-import CodeEditor from '@/components/CodeEditor';
+import CodeEditor, { CodeEditorHandle } from '@/components/CodeEditor';
 import Terminal, { TerminalHandle } from '@/components/Terminal';
 import Toolbar from '@/components/Toolbar';
 import TabBar, { Tab } from '@/components/TabBar';
@@ -41,9 +41,14 @@ export default function Home() {
   ]);
   const [activeId, setActiveId] = useState('tab-1');
   const [running, setRunning] = useState(false);
+  const [stepping, setStepping] = useState(false);
   const [vars, setVars] = useState<Record<string, VisuAlgValue>>({});
+
   const terminalRef = useRef<TerminalHandle>(null);
+  const editorRef = useRef<CodeEditorHandle>(null);
   const stopRef = useRef(false);
+  // Resolver que desbloqueia o próximo passo
+  const stepResolverRef = useRef<(() => void) | null>(null);
 
   const activeTab = tabs.find(t => t.id === activeId)!;
 
@@ -78,12 +83,13 @@ export default function Home() {
     setActiveId(tab.id);
   }, []);
 
-  const run = useCallback(async () => {
-    if (running) return;
+  // Lógica compartilhada de execução (run normal e passo a passo)
+  const execute = useCallback(async (stepMode: boolean) => {
     terminalRef.current?.clear();
     stopRef.current = false;
-    setRunning(true);
     setVars({});
+    setRunning(!stepMode);
+    setStepping(stepMode);
 
     const addLine = terminalRef.current?.addLine.bind(terminalRef.current);
     const code = activeTab.code;
@@ -92,9 +98,16 @@ export default function Home() {
       const tokens = new Lexer(code).tokenize();
       const ast = new Parser(tokens).parse();
 
-      addLine?.({ type: 'info', text: `▷  Executando "${(ast as any).name}"...\n` });
+      addLine?.({ type: 'info', text: `${stepMode ? '⏸' : '▷'}  Executando "${(ast as any).name}"...\n` });
 
       let outputBuffer = '';
+
+      const flushBuffer = () => {
+        if (outputBuffer) {
+          addLine?.({ type: 'output', text: outputBuffer });
+          outputBuffer = '';
+        }
+      };
 
       const interpreter = new Interpreter({
         onOutput: (text) => {
@@ -108,10 +121,7 @@ export default function Home() {
           }
         },
         onInput: () => {
-          if (outputBuffer) {
-            addLine?.({ type: 'output', text: outputBuffer });
-            outputBuffer = '';
-          }
+          flushBuffer();
           return new Promise<string>((resolve, reject) => {
             if (stopRef.current) { reject(new Error('Execução interrompida')); return; }
             terminalRef.current?.requestInput((val) => {
@@ -123,24 +133,52 @@ export default function Home() {
         onVarsUpdate: (snapshot) => {
           setVars({ ...snapshot });
         },
+        onStep: stepMode
+          ? (line) => {
+              editorRef.current?.setActiveLine(line);
+              return new Promise<void>((resolve, reject) => {
+                if (stopRef.current) { reject(new Error('Execução interrompida')); return; }
+                stepResolverRef.current = () => {
+                  if (stopRef.current) { reject(new Error('Execução interrompida')); }
+                  else { resolve(); }
+                };
+              });
+            }
+          : undefined,
       });
 
       await interpreter.run(ast);
 
-      if (outputBuffer) addLine?.({ type: 'output', text: outputBuffer });
+      flushBuffer();
       addLine?.({ type: 'info', text: '\n✓  Programa finalizado com sucesso.' });
     } catch (e: any) {
       if (!stopRef.current) {
         addLine?.({ type: 'error', text: `\n✗  Erro: ${e.message}` });
       }
     } finally {
+      editorRef.current?.setActiveLine(null);
       setRunning(false);
+      setStepping(false);
+      stepResolverRef.current = null;
     }
-  }, [activeTab, running]);
+  }, [activeTab]);
+
+  const run = useCallback(() => execute(false), [execute]);
+  const startStep = useCallback(() => execute(true), [execute]);
+
+  const nextStep = useCallback(() => {
+    stepResolverRef.current?.();
+    stepResolverRef.current = null;
+  }, []);
 
   const stop = useCallback(() => {
     stopRef.current = true;
+    // desbloqueia o passo atual para o erro se propague
+    stepResolverRef.current?.();
+    stepResolverRef.current = null;
     setRunning(false);
+    setStepping(false);
+    editorRef.current?.setActiveLine(null);
     terminalRef.current?.addLine({ type: 'error', text: '\n⚠  Execução interrompida pelo usuário.' });
   }, []);
 
@@ -156,7 +194,16 @@ export default function Home() {
 
   return (
     <div className="flex flex-col h-screen bg-[#080808] text-white overflow-hidden">
-      <Toolbar running={running} onRun={run} onStop={stop} onClear={clear} onFormat={format} />
+      <Toolbar
+        running={running}
+        stepping={stepping}
+        onRun={run}
+        onStop={stop}
+        onClear={clear}
+        onFormat={format}
+        onStartStep={startStep}
+        onNextStep={nextStep}
+      />
 
       <div className="flex flex-1 overflow-hidden">
         {/* Editor area com abas */}
@@ -171,13 +218,13 @@ export default function Home() {
             onOpenExample={handleOpenExample}
           />
           <div className="flex-1 bg-[#0d0d0d] overflow-hidden">
-            <CodeEditor value={activeTab.code} onChange={updateActiveCode} />
+            <CodeEditor ref={editorRef} value={activeTab.code} onChange={updateActiveCode} />
           </div>
         </div>
 
         {/* Painel direito: vars + terminal */}
         <div className="flex flex-col w-[400px] flex-shrink-0 p-3 pl-0 gap-3">
-          <VarsPanel vars={vars} running={running} />
+          <VarsPanel vars={vars} running={running || stepping} />
           <div className="flex-1 min-h-0">
             <Terminal ref={terminalRef} />
           </div>

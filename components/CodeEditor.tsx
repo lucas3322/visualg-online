@@ -1,6 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import { forwardRef, useImperativeHandle, useRef } from 'react';
 
 const MonacoEditor = dynamic(() => import('@monaco-editor/react'), { ssr: false });
 
@@ -67,12 +68,42 @@ function defineVisuAlgLanguage(monaco: any) {
   });
 }
 
+export interface CodeEditorHandle {
+  setActiveLine: (line: number | null) => void;
+}
+
 interface CodeEditorProps {
   value: string;
   onChange: (val: string) => void;
 }
 
-export default function CodeEditor({ value, onChange }: CodeEditorProps) {
+const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({ value, onChange }, ref) => {
+  const editorRef = useRef<any>(null);
+  const decorationsRef = useRef<string[]>([]);
+
+  useImperativeHandle(ref, () => ({
+    setActiveLine(line: number | null) {
+      const editor = editorRef.current;
+      if (!editor) return;
+      decorationsRef.current = editor.deltaDecorations(
+        decorationsRef.current,
+        line !== null
+          ? [{
+              range: { startLineNumber: line, endLineNumber: line, startColumn: 1, endColumn: 1 },
+              options: {
+                isWholeLine: true,
+                className: 'step-line-highlight',
+                glyphMarginClassName: 'step-line-glyph',
+              },
+            }]
+          : []
+      );
+      if (line !== null) {
+        editor.revealLineInCenterIfOutsideViewport(line);
+      }
+    },
+  }));
+
   return (
     <div className="flex-1 h-full">
       <MonacoEditor
@@ -82,6 +113,7 @@ export default function CodeEditor({ value, onChange }: CodeEditorProps) {
         onChange={(v) => onChange(v ?? '')}
         beforeMount={defineVisuAlgLanguage}
         theme="visualg-dark"
+        onMount={(editor) => { editorRef.current = editor; }}
         options={{
           fontSize: 14,
           fontFamily: '"Fira Code", "Cascadia Code", Consolas, monospace',
@@ -89,7 +121,7 @@ export default function CodeEditor({ value, onChange }: CodeEditorProps) {
           minimap: { enabled: false },
           scrollBeyondLastLine: false,
           lineNumbers: 'on',
-          glyphMargin: false,
+          glyphMargin: true,
           folding: true,
           lineDecorationsWidth: 0,
           lineNumbersMinChars: 3,
@@ -110,4 +142,7 @@ export default function CodeEditor({ value, onChange }: CodeEditorProps) {
       />
     </div>
   );
-}
+});
+
+CodeEditor.displayName = 'CodeEditor';
+export default CodeEditor;
