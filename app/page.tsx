@@ -14,6 +14,9 @@ import { formatVisuAlg } from '@/lib/visualg-formatter';
 let tabCounter = 1;
 
 const DEFAULT_CODE = `algoritmo "Meu Programa"
+// Desenvolvido por Lucas Pardinho
+// Contato: 964161550
+// Email: lucass706@icloud.com
 var
    nome: caractere
    idade: inteiro
